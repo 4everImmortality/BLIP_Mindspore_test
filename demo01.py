@@ -1,21 +1,27 @@
+import os
+# os.environ['CUDA_HOME'] = '/home'
+# print(os.environ['CUDA_HOME'])
 import json
-import torch
-from transformers import (
-    AutoProcessor,
-    BlipForConditionalGeneration,  # Use BlipForConditionalGeneration
-)
+from PIL import Image
+from tqdm import tqdm
+import mindspore
+from mindspore import context
+# context.set_context(device_target="GPU")
+# print(context.get_context('device_target'))
+from mindspore import Tensor
+from mindnlp.transformers import BlipForConditionalGeneration
+import mindnlp
+from mindnlp.transformers import BlipProcessor
 from pycocoevalcap.cider.cider import Cider
 from pycocoevalcap.spice.spice import Spice
 from pycocotools.coco import COCO
-from PIL import Image
-import os
-from tqdm import tqdm  # Import tqdm for progress bar
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Ensure the correct processor and model are loaded
-processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(device)
+# Load the processor and model from MindNLP and MindSpore
+processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+model = BlipForConditionalGeneration.from_pretrained(
+    "Salesforce/blip-image-captioning-base"
+)
 
 # Define CIDEr and SPICE evaluation functions
 def evaluate_predictions(predictions, references):
@@ -35,17 +41,12 @@ def generate_caption(image_path):
     # Load image
     image = Image.open(image_path).convert('RGB')
 
-    # Preprocess image
-    inputs = processor(images=image, return_tensors="pt").to(device)
+    # Preprocess image and generate caption
+    inputs = processor(images=image, return_tensors="ms")
 
-    # Generate caption
-    with torch.no_grad():  # Disable gradient tracking to save memory
-        out = model.generate(**inputs)
-    caption = processor.decode(out[0], skip_special_tokens=True)
-
-    # Manually free up memory
-    del inputs  # Delete input to free memory
-    torch.cuda.empty_cache()  # Clear CUDA memory cache
+    # Perform inference with MindSpore model
+    outputs = model.generate(**inputs)
+    caption = processor.decode(outputs[0], skip_special_tokens=True).strip()
 
     return caption
 
